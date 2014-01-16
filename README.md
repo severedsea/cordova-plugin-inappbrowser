@@ -20,3 +20,11 @@
 # org.apache.cordova.inappbrowser
 
 Plugin documentation: [doc/index.md](doc/index.md)
+
+(iOS and Android only)
+Added InAppBrowser option "clearsocialnetworkcookie" through window.open that clears InAppBrowser social network cookies specifically: 
+1. facebook.com
+2. linkedin.com
+3. twitter.com
+
+Hopefully, this can be extended to a more generic way of clearing cache by providing domains as arguments in InAppBrowser through window.open options. 

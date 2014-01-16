@@ -20,6 +20,7 @@ package org.apache.cordova.inappbrowser;
 
 import android.annotation.SuppressLint;
 import android.app.Dialog;
+import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -27,6 +28,7 @@ import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
+import android.text.TextUtils;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -34,10 +36,12 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.WindowManager.BadTokenException;
 import android.view.WindowManager.LayoutParams;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.CookieManager;
+import android.webkit.CookieSyncManager;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -57,6 +61,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.HashMap;
+import java.util.Vector;
 import java.util.StringTokenizer;
 
 @SuppressLint("SetJavaScriptEnabled")
@@ -76,6 +81,8 @@ public class InAppBrowser extends CordovaPlugin {
     private static final String CLOSE_BUTTON_CAPTION = "closebuttoncaption";
     private static final String CLEAR_ALL_CACHE = "clearcache";
     private static final String CLEAR_SESSION_CACHE = "clearsessioncache";
+    // HCA: Added browser option clearSocialNetworkCookie=yes|no in window.open
+    private static final String CLEAR_SOCIAL_NETWORK_COOKIE = "clearsocialnetworkcookie";
 
     private Dialog dialog;
     private WebView inAppWebView;
@@ -86,6 +93,10 @@ public class InAppBrowser extends CordovaPlugin {
     private String buttonLabel = "Done";
     private boolean clearAllCache= false;
     private boolean clearSessionCache=false;
+    // HCA: Added browser option clearSocialNetworkCookie=yes|no in window.open
+    private boolean clearSocialNetworkCookie=false;
+    // HCA: Added progress dialog when loading page 
+    private ProgressDialog progressDialog;
 
     /**
      * Executes the request and returns PluginResult.
@@ -417,6 +428,13 @@ public class InAppBrowser extends CordovaPlugin {
                 if (cache != null) {
                     clearSessionCache = cache.booleanValue();
                 }
+                // HCA: Added browser option clearsocialnetworkcookie=yes|no in window.open
+                else {
+                    cache = features.get(CLEAR_SOCIAL_NETWORK_COOKIE);
+                    if (cache != null) {
+                        clearSocialNetworkCookie = cache.booleanValue();
+                    }
+                }
             }
         }
         
@@ -562,6 +580,17 @@ public class InAppBrowser extends CordovaPlugin {
                 } else if (clearSessionCache) {
                     CookieManager.getInstance().removeSessionCookie();
                 }
+                 // HCA: Added browser option clearSocialNetworkCookie=yes|no in window.open
+                else if (clearSocialNetworkCookie) {
+                    LOG.e(LOG_TAG, "Deleting InAppBrowser cookies for the following domains: facebook.com, linkedin.com, twitter.com");
+                    // Clear all social network cookies
+                    clearCookies("http://facebook.com");
+                    clearCookies("http://linkedin.com");
+                    clearCookies("http://twitter.com");
+                    
+                    // Set clear social network cookie flag to NO, only clear once.
+                    clearSocialNetworkCookie = false;
+                }
 
                 inAppWebView.loadUrl(url);
                 inAppWebView.setId(6);
@@ -595,6 +624,8 @@ public class InAppBrowser extends CordovaPlugin {
 
                 dialog.setContentView(main);
                 dialog.show();
+                // HCA: Added progress dialog when loading page 
+                progressDialog = ProgressDialog.show(dialog.getContext(), "", "Loading...", true);
                 dialog.getWindow().setAttributes(lp);
                 // the goal of openhidden is to load the url and not display it
                 // Show() needs to be called to cause the URL to be loaded
@@ -605,6 +636,59 @@ public class InAppBrowser extends CordovaPlugin {
         };
         this.cordova.getActivity().runOnUiThread(runnable);
         return "";
+    }
+
+    // HCA: Added browser option clearSocialNetworkCookie=yes|no in window.open
+    /**
+     * Added implementation of "clearing" cookies for a specific domain 
+     * Reference: http://stackoverflow.com/a/19600164
+     * @param url
+     */
+    public void clearCookies(String url) {
+        Uri uri = Uri.parse(url);
+        String host = uri.getHost();
+        System.out.println(host);
+        _clearCookies(url);
+        _clearCookies("http://." + host);
+        _clearCookies("https://." + host);
+    }
+
+    private void _clearCookies(String url) {
+        if (TextUtils.isEmpty(url)) {
+            return;
+        }
+        String cookieString = CookieManager.getInstance().getCookie(url);
+        Vector<String> cookieNames = _extractCookieNames(cookieString);
+        if (cookieNames == null || cookieNames.isEmpty()) {
+            return;
+        }
+        for (String cookieName : cookieNames) {
+            CookieManager.getInstance().setCookie(url, cookieName + "=''");
+        }
+        CookieSyncManager.getInstance().sync();
+    }
+
+    private Vector<String> _extractCookieNames(String cookieString) {
+        if (TextUtils.isEmpty(cookieString)) {
+            return null;
+        }
+        String[] cookies = cookieString.split(";");
+        Vector<String> vCookies = new Vector<String>();
+        for (String cookie : cookies) {
+            cookie = cookie.trim();
+            if (TextUtils.isEmpty(cookie)) {
+                continue;
+            }
+            if (!cookie.contains("=")) {
+                continue;
+            }
+            String[] cookieNameValue = cookie.split("=");
+            vCookies.add(cookieNameValue[0]);
+        }
+        if (vCookies.isEmpty()) {
+            return null;
+        }
+        return vCookies;
     }
 
     /**
@@ -726,6 +810,9 @@ public class InAppBrowser extends CordovaPlugin {
             }
 
             try {
+                // HCA: Added progress dialog when loading page 
+                progressDialog.show();
+
                 JSONObject obj = new JSONObject();
                 obj.put("type", LOAD_START_EVENT);
                 obj.put("url", newloc);
@@ -733,12 +820,16 @@ public class InAppBrowser extends CordovaPlugin {
                 sendUpdate(obj, true);
             } catch (JSONException ex) {
                 Log.d(LOG_TAG, "Should never happen");
+            } catch (BadTokenException bte) {
+                // HCA: Workaround: Added exception handling for progress dialog. Ignore error
+                Log.d(LOG_TAG, "Ignored progressDialog error on Cordova exit app");
             }
         }
         
         public void onPageFinished(WebView view, String url) {
             super.onPageFinished(view, url);
-            
+             // HCA: Added progress dialog when loading page 
+            progressDialog.dismiss();
             try {
                 JSONObject obj = new JSONObject();
                 obj.put("type", LOAD_STOP_EVENT);
@@ -752,7 +843,8 @@ public class InAppBrowser extends CordovaPlugin {
         
         public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
             super.onReceivedError(view, errorCode, description, failingUrl);
-            
+            // HCA: Added progress dialog when loading page 
+            progressDialog.dismiss();
             try {
                 JSONObject obj = new JSONObject();
                 obj.put("type", LOAD_ERROR_EVENT);

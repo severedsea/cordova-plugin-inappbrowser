@@ -122,6 +122,10 @@
 
     _previousStatusBarStyle = [UIApplication sharedApplication].statusBarStyle;
 
+    // HCA: Added browser option clearsocialnetworkcookie=yes|no in window.open
+    NSLog(@"Browser option clearsocialnetworkcookie=%@", browserOptions.clearsocialnetworkcookie ? @"YES" : @"NO");
+    self.inAppBrowserViewController.clearSocialNetworkCookie = browserOptions.clearsocialnetworkcookie;
+
     [self.inAppBrowserViewController showLocationBar:browserOptions.location];
     [self.inAppBrowserViewController showToolBar:browserOptions.toolbar :browserOptions.toolbarposition];
     if (browserOptions.closebuttoncaption != nil) {
@@ -445,7 +449,9 @@
     self.webView.scalesPageToFit = NO;
     self.webView.userInteractionEnabled = YES;
 
-    self.spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhite];
+    // HCA: Modified UIActivityIndicatorView properties to show InAppBrowser loading indicator
+    // self.spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhite];
+    self.spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleGray];
     self.spinner.alpha = 1.000;
     self.spinner.autoresizesSubviews = YES;
     self.spinner.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin;
@@ -453,11 +459,15 @@
     self.spinner.clipsToBounds = NO;
     self.spinner.contentMode = UIViewContentModeScaleToFill;
     self.spinner.contentStretch = CGRectFromString(@"{{0, 0}, {1, 1}}");
-    self.spinner.frame = CGRectMake(454.0, 231.0, 20.0, 20.0);
+    // HCA: Modified UIActivityIndicatorView properties to show InAppBrowser loading indicator
+    // self.spinner.frame = CGRectMake(454.0, 231.0, 20.0, 20.0);
+    self.spinner.frame = CGRectMake(roundf((self.view.bounds.size.width - 50)/2), roundf((self.view.bounds.size.height - 50)/2), 50, 50);
     self.spinner.hidden = YES;
     self.spinner.hidesWhenStopped = YES;
     self.spinner.multipleTouchEnabled = NO;
-    self.spinner.opaque = NO;
+    // HCA: Modified UIActivityIndicatorView properties to show InAppBrowser loading indicator
+    // self.spinner.opaque = NO;
+    self.spinner.opaque = YES;
     self.spinner.userInteractionEnabled = NO;
     [self.spinner stopAnimating];
 
@@ -761,6 +771,25 @@
 
     [self.spinner startAnimating];
 
+    // HCA: Added browser option clearsocialnetworkcookie=yes|no in window.open
+    // Clear social network cookies based on browser option flag
+    NSLog(@"Evaluating clearSocialNetworkCookie option/flag: %@", self.clearSocialNetworkCookie ? @"YES" : @"NO");
+    if(self.clearSocialNetworkCookie) {
+        NSLog(@"Deleting InAppBrowser cookies for the following domains: facebook.com, linkedin.com, twitter.com");
+        
+        // Clear all social network cookies
+        for(NSHTTPCookie *cookie in [[NSHTTPCookieStorage sharedHTTPCookieStorage] cookies]) {
+            if([[cookie domain] rangeOfString:@"facebook.com"].location != NSNotFound ||
+               [[cookie domain] rangeOfString:@"linkedin.com"].location != NSNotFound ||
+               [[cookie domain] rangeOfString:@"twitter.com"].location != NSNotFound) {
+                [[NSHTTPCookieStorage sharedHTTPCookieStorage] deleteCookie:cookie];
+            }
+        }
+        // Set clear social network cookie flag to NO, only clear once.
+        self.clearSocialNetworkCookie = NO;
+        [[NSUserDefaults standardUserDefaults] synchronize];
+    }
+
     return [self.navigationDelegate webViewDidStartLoad:theWebView];
 }
 
@@ -854,6 +883,8 @@
     if (self = [super init]) {
         // default values
         self.location = YES;
+        // HCA: Added browser option clearsocialnetworkcookie=yes|no in window.open
+        self.clearsocialnetworkcookie = NO;
         self.toolbar = YES;
         self.closebuttoncaption = nil;
         self.toolbarposition = kInAppBrowserToolbarBarPositionBottom;

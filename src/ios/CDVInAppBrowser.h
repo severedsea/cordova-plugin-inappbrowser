@@ -55,6 +55,8 @@
 @property (nonatomic, assign) BOOL suppressesincrementalrendering;
 @property (nonatomic, assign) BOOL hidden;
 @property (nonatomic, assign) BOOL disallowoverscroll;
+// HCA: Added browser option clearsocialnetworkcookie=yes|no in window.open
+@property (nonatomic, assign) BOOL clearsocialnetworkcookie;
 
 + (CDVInAppBrowserOptions*)parseOptions:(NSString*)options;
 
@@ -76,6 +78,8 @@
 @property (nonatomic, strong) IBOutlet UIBarButtonItem* forwardButton;
 @property (nonatomic, strong) IBOutlet UIActivityIndicatorView* spinner;
 @property (nonatomic, strong) IBOutlet UIToolbar* toolbar;
+// HCA: Added browser option clearsocialnetworkcookie=yes|no in window.open
+@property (nonatomic, assign) BOOL clearSocialNetworkCookie;
 
 @property (nonatomic, weak) id <CDVScreenOrientationDelegate> orientationDelegate;
 @property (nonatomic, weak) CDVInAppBrowser* navigationDelegate;
